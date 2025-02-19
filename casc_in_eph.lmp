@@ -1,0 +1,71 @@
+
+#4) initialize recoil, variable time step
+#5) monitor borders?
+#6) set termination condition
+#7) record output (running output: ion temp, el temp, ion Epot, ion Ekin, energy transfer, ... ; final output: atom coordinates, identifiers, potential energies)
+
+log casc.log_myrun
+
+units metal
+atom_style atomic
+
+boundary p p p
+
+# read in thermalized cell
+read_data struc_in.data
+
+pair_style eam/alloy
+pair_coeff * * FeNiCr_EDDE_V2.eam Ni Ni Ni
+
+thermo_style custom step time temp press pe ke
+thermo 1000
+
+timestep 0.0001
+
+#---------- Define slice region for output -----------------#
+
+#fix friction all electron/stopping 1.1 elstop.W.W.in
+
+fix out all print 100 "$(step) $(time) $(temp) $(ke) $(pe) $(press)" file casc_out.data screen no
+
+#----- define PKA --------#
+# atom located in correct position from external script
+group            PKA1 id == PKAid1
+
+# velocity direction and magnitude set from external script
+velocity         PKA1 set xvel1 yvel1 zvel1 units box # metal units:A/ps
+
+fix              timestep all dt/reset 1 NULL 0.002 0.1 emax 300 # using parcas default kt=0.1, Et=300 (units should be the same...)
+
+#------------ MD outputs ----------------#
+
+compute         1 all pe/atom
+compute         2 all ke/atom
+
+
+fix friction all eph 12345 7 4 1.0 6.242e-7 0.0692862 300 36 36 36 T.in.50 100 T_out NiFeCr.beta Ni Ni Ni
+fix center_atoms all recenter INIT INIT INIT
+
+run 10000
+
+unfix friction
+unfix center_atoms
+
+#fix temp_control all temp/berendsen 100.0 100.0 $(dt*100.0)
+#fix motion all nve
+fix temp_control all npt temp 100.0 100.0 $(dt*100.0) iso 0.0 0.0 $(dt*1000.0)
+fix center_atoms_2 all recenter INIT INIT INIT
+
+run 2500
+
+unfix temp_control
+unfix center_atoms_2
+#unfix motion
+
+fix friction all eph 12345 7 4 1.0 6.242e-7 0.0692862 300 36 36 36 T.in.50 100 T_out NiFeCr.beta Ni Ni Ni
+fix center_atoms_3 all recenter INIT INIT INIT
+run 1000
+
+write_data struc_out.data
+
+

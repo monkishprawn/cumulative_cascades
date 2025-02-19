@@ -1,0 +1,68 @@
+#-------- System set-up --------------#
+# We simply want this file to initialise the system,       #
+# then run with npt, and then with eph                     #
+# Note that even though we have only two atom types        #
+# we still make room for 3 and always include Ni Fe Ni     #
+# to the end. If we don't do this, the problem would crash # 
+# ------------------------------------#
+log thermalize.log
+
+units metal
+atom_style atomic
+
+boundary p p p
+
+read_data struc_in.data
+
+# -------------- Set a certain fraction on atoms to different type -----------#
+
+
+# --------------- Interatomic potential ------------------ #
+
+pair_style eam/alloy
+pair_coeff * * FeNiCr_EDDE_V2.eam Ni Ni Ni
+
+#----------- Configure output -----------#
+
+thermo_style custom step time temp press pe ke
+thermo 10
+fix out all print 100 "$(step) $(time) $(press) $(temp)" file out.data screen no
+
+#-------------- Equilibration with pressure and temperature control ----------------#
+
+velocity all create 1 4928459 rot yes mom yes dist gaussian
+
+timestep 0.0001
+
+fix 1 all temp/berendsen 100.0 100.0 $(dt*100.0)
+fix motion all nve
+# Use less for test, more for actual run
+
+#fix berendsen all temp/berendsen 1.0 1.0 $(dt*100.0)
+run 8000
+
+#unfix berendsen
+#timestep 0.0001
+#fix equil all temp/berendsen 800.0 800.0 $(dt*100.0)
+#run 10000
+#unfix equil
+
+
+
+# -------------- Equilibration with eph model --------------------- #
+timestep 0.0005
+
+fix friction all eph 12345 7 4 1.0 3.5e-6 0.0549 300 9 9 9 T.in.50 100 T_out NiFeCr.beta Ni Ni Ni
+# Use less for test, more for actual run
+run 25000
+
+unfix friction
+
+write_data struc_out.data 
+
+dump final all custom 10 finalpos.xyz element x y z id
+dump_modify final element Ni Ni Ni
+
+# We need this run 1 to save the finalpos.xyz #
+run 1
+
